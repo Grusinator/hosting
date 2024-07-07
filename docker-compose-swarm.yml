@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    environment:
+      REGISTRY_HTTP_SECRET: randomsecret
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/domain.crt
+      REGISTRY_HTTP_TLS_KEY: /certs/domain.key
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.registry.rule=Host(`registry.wsh-it.dk`)"
+      - "traefik.http.services.registry.loadbalancer.server.port=5000"
+
+  portus:
+    image: opensuse/portus:2.4
+    environment:
+      PORTUS_MACHINE_FQDN_VALUE: portus
+      PORTUS_DB_HOST: db
+      PORTUS_DB_USERNAME: portus
+      PORTUS_DB_PASSWORD: portus_password
+      PORTUS_DB_NAME: portus
+      PORTUS_SECRET_KEY_BASE: a_secure_random_string
+      PORTUS_KEY_PATH: /certificates/portus.key
+      PORTUS_PASSWORD: portus_password
+      PORTUS_PORT: 3000
+    ports:
+      - "3002:3000"
+    volumes:
+      - portus_data:/var/lib/portus
+      - ./certs:/certificates
+    depends_on:
+      - db
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portus.rule=Host(`portus.wsh-it.dk`)"
+      - "traefik.http.services.portus.loadbalancer.server.port=3000"
+
+  db:
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: portus
+      MYSQL_USER: portus
+      MYSQL_PASSWORD: portus_password
+    volumes:
+      - db_data:/var/lib/mysql
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.wsh-it.dk`)"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.wsh-it.dk`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+volumes:
+  registry_data:
+  portus_data:
+  db_data:
+  prometheus_data:
+  grafana_data:
+
+configs:
+  prometheus_config:
+    file: ./prometheus.yml
