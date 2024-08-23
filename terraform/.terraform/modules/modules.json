@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"","Source":"","Dir":"."},{"Key":"docker-registry","Source":"./docker-registry.tf","Dir":"docker-registry.tf"},{"Key":"docker-swarm","Source":"./docker-swarm.tf","Dir":"docker-swarm.tf"},{"Key":"monitoring","Source":"./monitoring.tf","Dir":"monitoring.tf"},{"Key":"rancher","Source":"./rancher.tf","Dir":"rancher.tf"}]}

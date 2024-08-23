@@ -1,1 +1,4 @@
 invoke
+loguru
+ruff
+pyngrok

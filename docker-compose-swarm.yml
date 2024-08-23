@@ -1,107 +1,72 @@
 version: '3.8'
 
 services:
+  traefik:
+    image: traefik:v2.5
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "${TRAEFIK_HTTP_PORT}:80"
+      - "${TRAEFIK_HTTPS_PORT}:443"
+      - "${TRAEFIK_ADMIN_PORT}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DOMAIN}`)"
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+    configs:
+      - source: env_file
+        target: /app/.env
+
   registry:
     image: registry:2
-    ports:
-      - "5000:5000"
     volumes:
       - registry_data:/var/lib/registry
     environment:
-      REGISTRY_HTTP_SECRET: randomsecret
-      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/domain.crt
-      REGISTRY_HTTP_TLS_KEY: /certs/domain.key
+      REGISTRY_HTTP_SECRET: ${REGISTRY_HTTP_SECRET}
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.registry.rule=Host(`registry.wsh-it.dk`)"
-      - "traefik.http.services.registry.loadbalancer.server.port=5000"
-
-  portus:
-    image: opensuse/portus:2.4
-    environment:
-      PORTUS_MACHINE_FQDN_VALUE: portus
-      PORTUS_DB_HOST: db
-      PORTUS_DB_USERNAME: portus
-      PORTUS_DB_PASSWORD: portus_password
-      PORTUS_DB_NAME: portus
-      PORTUS_SECRET_KEY_BASE: a_secure_random_string
-      PORTUS_KEY_PATH: /certificates/portus.key
-      PORTUS_PASSWORD: portus_password
-      PORTUS_PORT: 3000
-    ports:
-      - "3002:3000"
-    volumes:
-      - portus_data:/var/lib/portus
-      - ./certs:/certificates
-    depends_on:
-      - db
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.portus.rule=Host(`portus.wsh-it.dk`)"
-      - "traefik.http.services.portus.loadbalancer.server.port=3000"
-
-  db:
-    image: mariadb:latest
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: portus
-      MYSQL_USER: portus
-      MYSQL_PASSWORD: portus_password
-    volumes:
-      - db_data:/var/lib/mysql
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-
-  prometheus:
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - prometheus_data:/prometheus
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.registry.rule=Host(`${REGISTRY_DOMAIN}`)"
+        - "traefik.http.services.registry.loadbalancer.server.port=5000"
     configs:
-      - source: prometheus_config
-        target: /etc/prometheus/prometheus.yml
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.prometheus.rule=Host(`prometheus.wsh-it.dk`)"
-      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      - source: env_file
+        target: /app/.env
 
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3001:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
+  registry-ui:
+    image: joxit/docker-registry-ui:static
+    environment:
+      - REGISTRY_URL=http://registry:5000
+      - SINGLE_REGISTRY=true
+
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.wsh-it.dk`)"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.registry-ui.rule=Host(`${REGISTRY_UI_DOMAIN}`)"
+        - "traefik.http.services.registry-ui.loadbalancer.server.port=80"
+    configs:
+      - source: env_file
+        target: /app/.env
 
 volumes:
   registry_data:
-  portus_data:
-  db_data:
-  prometheus_data:
-  grafana_data:
 
 configs:
-  prometheus_config:
-    file: ./prometheus.yml
+  env_file:
+    file: .env
