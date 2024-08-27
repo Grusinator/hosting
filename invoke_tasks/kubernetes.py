@@ -66,20 +66,20 @@ def delete_cluster(c, name="my-cluster"):
 
 
 @task
-def join_as_worker(c):
-    # Get environment variables
+def join_as_worker(c, skip_cert_verification=True):
     k8s_master_ip = os.getenv("K8S_JOIN_IP")
     k8s_token = os.getenv("K8S_JOIN_TOKEN")
+    k8s_ca_cert_hash = os.getenv("K8S_CA_CERT_HASH", None)
 
-    if not k8s_master_ip or not k8s_token:
-        print("Environment variables K8S_JOIN_IP and K8S_JOIN_TOKEN are required.")
+    if not (k8s_master_ip and k8s_token):
+        print("K8S_JOIN_IP and K8S_JOIN_TOKEN are required.")
         return
 
-    # Construct the kubeadm join command with unsafe skip for CA verification
-    join_command = f"k3s agent --server https://{k8s_master_ip}:6443 --token {k8s_token}"
+    join_command = f"kubeadm join {k8s_master_ip}:6443 --token {k8s_token} " \
+                   f"{'--discovery-token-unsafe-skip-ca-verification' if skip_cert_verification else f'--discovery-token-ca-cert-hash {k8s_ca_cert_hash}' or ''}"
 
-    # Execute the join command with sudo
-    c.sudo(join_command, pty=True)
+    c.sudo(join_command)
+
 
 @task
 def deploy_nginx(c):
