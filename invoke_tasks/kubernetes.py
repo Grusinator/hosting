@@ -33,6 +33,7 @@ def setup_cluster(c, name="my-cluster", api_port=6443):
 @task
 def deploy_prometheus_grafana(c):
     kubeconfig = os.environ.get('KUBECONFIG')
+    admin_password = os.getenv("ADMIN_PASSWORD")
     print(kubeconfig)
     """Deploy Prometheus and Grafana to the Kubernetes cluster"""
     # Add the Helm repositories for Prometheus and Grafana
@@ -41,10 +42,34 @@ def deploy_prometheus_grafana(c):
     c.run("helm repo update")
     
     # Deploy Prometheus
-    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace")
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace \
+           --set server.persistentVolume.storageClass=longhorn \
+           --set alertmanager.persistentVolume.storageClass=longhorn \
+           --set pushgateway.persistentVolume.storageClass=longhorn")
     
     # Deploy Grafana
-    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install grafana grafana/grafana --namespace monitoring --create-namespace")
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install grafana grafana/grafana --namespace monitoring --create-namespace \
+           --set persistence.enabled=true \
+           --set persistence.storageClassName=longhorn \
+           --set persistence.size=10Gi \
+           --set adminPassword='YourAdminPassword' \
+           --set service.type=LoadBalancer \
+           --set service.port=80")
+
+
+@task
+def deploy_longhorn(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    """Deploy Longhorn storage to the Kubernetes cluster"""
+    # Add the Longhorn Helm repository
+    c.run("helm repo add longhorn https://charts.longhorn.io")
+    c.run("helm repo update")
+    # Deploy Longhorn
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace")
+    c.run(f"KUBECONFIG={kubeconfig} kubectl apply -f k8s/cluster/longhorn-storageclass.yaml")
+    c.run(f"KUBECONFIG={kubeconfig} kubectl patch storageclass longhorn -p '{{\"metadata\": {{\"annotations\":{{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}}}}'")
+
+
 
 @task
 def get_prometheus_grafana_password(c):
