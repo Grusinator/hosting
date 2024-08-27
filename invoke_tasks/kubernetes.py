@@ -29,6 +29,30 @@ def setup_cluster(c, name="my-cluster", api_port=6443):
     c.sudo(f"chown $(id -u):$(id -g) {kubeconfig_path}")
     print(f"Kubeconfig written to {kubeconfig_path}")
 
+def get_control_plane_node(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    """Retrieve the control plane node name."""
+    result = c.run(f"KUBECONFIG={kubeconfig} kubectl get nodes --selector='node-role.kubernetes.io/control-plane' -o jsonpath='{{.items[0].metadata.name}}'", hide=True)
+    return result.stdout.strip()
+
+@task
+def add_taint(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    """Add taint to the control plane node to prevent scheduling workloads."""
+    node_name = get_control_plane_node(c)
+    taint_cmd = f"KUBECONFIG={kubeconfig} kubectl taint nodes {node_name} node-role.kubernetes.io/control-plane:NoSchedule"
+    c.run(taint_cmd)
+    print(f"Taint added to {node_name}")
+
+@task
+def remove_taint(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    """Remove taint from the control plane node to allow scheduling workloads."""
+    node_name = get_control_plane_node(c)
+    remove_taint_cmd = f"KUBECONFIG={kubeconfig} kubectl taint nodes {node_name} node-role.kubernetes.io/control-plane:NoSchedule-"
+    c.run(remove_taint_cmd)
+    print(f"Taint removed from {node_name}")
+
 
 @task
 def deploy_prometheus_grafana(c):
