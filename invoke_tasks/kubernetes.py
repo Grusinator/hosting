@@ -47,6 +47,22 @@ def delete_cluster(c, name="my-cluster"):
 
 
 @task
+def join_as_worker(c):
+    # Get environment variables
+    k8s_master_ip = os.getenv("K8S_JOIN_IP")
+    k8s_token = os.getenv("K8S_JOIN_TOKEN")
+
+    if not k8s_master_ip or not k8s_token:
+        print("Environment variables K8S_JOIN_IP and K8S_JOIN_TOKEN are required.")
+        return
+
+    # Construct the kubeadm join command with unsafe skip for CA verification
+    join_command = f"k3s agent --server https://{k8s_master_ip}:6443 --token {k8s_token}"
+
+    # Execute the join command with sudo
+    c.sudo(join_command, pty=True)
+
+@task
 def deploy_nginx(c):
     """Deploy Nginx with a custom configuration"""
     # c.run("kubectl apply -f k8s/example_deployments/nginx/nginx-configmap.yaml")
