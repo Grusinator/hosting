@@ -13,6 +13,39 @@ from loguru import logger
 load_dotenv()
 
 
+
+@task
+def setup_cluster(c, name="my-cluster", ip="localhost", api_port=6443):
+    """Create a new k3d cluster with Traefik enabled"""
+    # Create the k3d cluster with specified name and API port
+    cmd = f"k3d cluster create {name} --api-port {ip}:{api_port} -p 8080:80@loadbalancer --k3s-arg=\"--disable=traefik@server:0\""
+    c.sudo(cmd)
+    print(f"Cluster '{name}' created successfully")
+
+    # Define the kubeconfig file path
+    kubeconfig_path = Path.cwd() / "kubeconfig.yaml"
+    
+    # Export the kubeconfig to a file in the root of the repository
+    c.sudo(f"k3d kubeconfig get {name} > {kubeconfig_path}")
+    print(f"Kubeconfig written to {kubeconfig_path}")
+
+    # Apply Traefik CRD and RBAC
+    c.sudo("kubectl apply -f k8s/cluster/traefik-crd.yaml")
+    c.sudo("kubectl apply -f k8s/cluster/traefik-rbac.yaml")
+    
+    # Apply Traefik deployment
+    c.sudo("kubectl apply -f k8s/cluster/traefik-deployment.yaml")
+    
+    print("Traefik Ingress Controller installed successfully")
+
+
+@task
+def delete_cluster(c, name="my-cluster"):
+    """Delete the k3d cluster"""
+    c.sudo(f"k3d cluster delete {name}")
+    print(f"Cluster '{name}' deleted successfully")
+
+
 @task
 def deploy_nginx(c):
     """Deploy Nginx with a custom configuration"""
@@ -31,12 +64,6 @@ def delete_nginx(c):
     c.run("kubectl delete -f nginx-configmap.yaml")
     print("Nginx deployment deleted")
 
-
-@task
-def delete_cluster(c, name="my-cluster"):
-    """Delete the k3d cluster"""
-    c.run(f"k3d cluster delete {name}")
-    print(f"Cluster '{name}' deleted successfully")
 
 @task
 def deploy_job(c, job_file):
@@ -74,22 +101,6 @@ def push_image_to_registry(c, image_name, tag="latest"):
     c.run(f"docker push {local_image}")
     print(f"Image {image_name}:{tag} pushed to local registry")
 
-
-@task
-def setup_cluster(c, name="my-cluster", api_port=6443):
-    """Create a new k3d cluster with Traefik enabled"""
-    cmd = f"k3d cluster create {name} --api-port {api_port} -p 8080:80@loadbalancer --k3s-arg=\"--disable=traefik@server:0\""
-    c.run(cmd)
-    print(f"Cluster '{name}' created successfully")
-
-    # Apply Traefik CRD and RBAC
-    c.run("kubectl apply -f k8s/cluster/traefik-crd.yaml")
-    c.run("kubectl apply -f k8s/cluster/traefik-rbac.yaml")
-    
-    # Apply Traefik deployment
-    c.run("kubectl apply -f k8s/cluster/traefik-deployment.yaml")
-    
-    print("Traefik Ingress Controller installed successfully")
 
 
 

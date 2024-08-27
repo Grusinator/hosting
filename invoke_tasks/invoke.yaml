@@ -1,0 +1,4 @@
+#sudo:
+#  password: null
+run:
+  pty: true
