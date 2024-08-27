@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: traefik-ingress-controller
-
+  name: traefik-account
+  namespace: kube-system
 ---
-kind: Deployment
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: traefik
+  namespace: kube-system
   labels:
     app: traefik
-
 spec:
   replicas: 1
   selector:
@@ -21,34 +21,28 @@ spec:
       labels:
         app: traefik
     spec:
-      serviceAccountName: traefik-ingress-controller
+      serviceAccountName: traefik-account
       containers:
-        - name: traefik
-          image: traefik:v2.5
-          args:
-            - --api.insecure
-            - --providers.kubernetesingress
-          ports:
-            - name: web
-              containerPort: 80
-            - name: admin
-              containerPort: 8080
-
+      - name: traefik
+        image: traefik:v2.9
+        args:
+        - --api.insecure
+        - --providers.kubernetesingress
+        ports:
+        - name: web
+          containerPort: 80
+        - name: dashboard
+          containerPort: 8080
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: traefik
+  namespace: kube-system
 spec:
   type: LoadBalancer
   ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 80
-      name: web
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
-      name: admin
+  - port: 80
+    targetPort: web
   selector:
     app: traefik
