@@ -13,21 +13,25 @@ from loguru import logger
 load_dotenv()
 
 
-
 @task
 def setup_cluster(c, name="my-cluster", ip="localhost", api_port=6443):
-    """Create a new k3d cluster with Traefik enabled"""
-    # Create the k3d cluster with specified name and API port
-    cmd = f"k3d cluster create {name} --api-port {ip}:{api_port} -p 8080:80@loadbalancer --k3s-arg=\"--disable=traefik@server:0\""
-    c.sudo(cmd)
-    print(f"Cluster '{name}' created successfully")
-
-    # Define the kubeconfig file path
-    kubeconfig_path = Path.cwd() / "kubeconfig.yaml"
+    """Setup a new Kubernetes cluster with kubeadm and install Traefik"""
     
-    # Export the kubeconfig to a file in the root of the repository
-    c.sudo(f"k3d kubeconfig get {name} > {kubeconfig_path}")
+    # Initialize the Kubernetes cluster with kubeadm
+    cmd = f"kubeadm init --apiserver-advertise-address={ip} --apiserver-bind-port={api_port} --pod-network-cidr=10.244.0.0/16"
+    c.sudo(cmd)
+    print(f"Cluster '{name}' initialized successfully")
+
+    # Set up kubeconfig for kubectl usage
+    kubeconfig_path = Path.home() / ".kube" / "config"
+    c.sudo(f"mkdir -p {kubeconfig_path.parent}")
+    c.sudo(f"cp /etc/kubernetes/admin.conf {kubeconfig_path}")
+    c.sudo(f"chown $(id -u):$(id -g) {kubeconfig_path}")
     print(f"Kubeconfig written to {kubeconfig_path}")
+
+    # Install a Pod network (e.g., Calico, Flannel)
+    c.sudo("kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml")
+    print("Pod network installed successfully")
 
     # Apply Traefik CRD and RBAC
     c.sudo("kubectl apply -f k8s/cluster/traefik-crd.yaml")
@@ -41,9 +45,24 @@ def setup_cluster(c, name="my-cluster", ip="localhost", api_port=6443):
 
 @task
 def delete_cluster(c, name="my-cluster"):
-    """Delete the k3d cluster"""
-    c.sudo(f"k3d cluster delete {name}")
+    """Delete the Kubernetes cluster"""
+    
+    # Tear down the cluster
+    c.sudo("kubeadm reset -f")
+    c.sudo("rm -rf ~/.kube/config")
     print(f"Cluster '{name}' deleted successfully")
+
+
+
+@task
+def delete_cluster(c, name="my-cluster"):
+    """Delete the Kubernetes cluster"""
+    
+    # Tear down the cluster
+    c.sudo("kubeadm reset -f")
+    c.sudo("rm -rf ~/.kube/config")
+    print(f"Cluster '{name}' deleted successfully")
+
 
 
 @task
