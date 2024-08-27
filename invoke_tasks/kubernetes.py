@@ -14,9 +14,9 @@ load_dotenv()
 
 
 @task
-def setup_cluster(c, name="my-cluster", ip="localhost", api_port=6443):
+def setup_cluster(c, name="my-cluster", api_port=6443):
     """Setup a new Kubernetes cluster with kubeadm and install Traefik"""
-    
+    ip = os.getenv("K8S_JOIN_IP")
     # Initialize the Kubernetes cluster with kubeadm
     cmd = f"kubeadm init --apiserver-advertise-address={ip} --apiserver-bind-port={api_port} --pod-network-cidr=10.244.0.0/16"
     c.sudo(cmd)
@@ -29,17 +29,44 @@ def setup_cluster(c, name="my-cluster", ip="localhost", api_port=6443):
     c.sudo(f"chown $(id -u):$(id -g) {kubeconfig_path}")
     print(f"Kubeconfig written to {kubeconfig_path}")
 
-    # Install a Pod network (e.g., Calico, Flannel)
-    c.sudo("kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml")
-    print("Pod network installed successfully")
+@task
+def deploy_pod_network(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    """Install Calico v3.28 on the Kubernetes cluster"""
+    # Add the Calico Helm repository
+    c.run("helm repo add projectcalico https://docs.tigera.io/calico/charts")
+    # Update the Helm repositories
+    c.run("helm repo update")
+    # Install the Calico operator
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install --debug calico projectcalico/tigera-operator --namespace tigera-operator --create-namespace")
+    print("Calico installed successfully")
 
+@task
+def deploy_calico(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    
+        # Install a Pod network (e.g., Calico, Flannel)
+    """Install Calico v3.28 on the Kubernetes cluster"""
+    # Install the Tigera Calico operator and custom resource definitions
+    c.sudo("kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/tigera-operator.yaml")
+    print("Tigera Calico operator installed successfully")
+
+    # Install Calico by creating the necessary custom resource
+    c.run(f"KUBECONFIG={kubeconfig} kubectl create --validate=false -f k8s/cluster/calico-custom-resources.yaml")
+    print("Calico custom resources created successfully")
+
+    # Monitor the status of Calico pods
+    c.run("watch kubectl get pods -n calico-system")
+
+
+@task
+def deploy_traefik(c):
+    """Deploy Traefik Ingress Controller to the Kubernetes cluster"""
     # Apply Traefik CRD and RBAC
-    c.sudo("kubectl apply -f k8s/cluster/traefik-crd.yaml")
-    c.sudo("kubectl apply -f k8s/cluster/traefik-rbac.yaml")
-    
-    # Apply Traefik deployment
-    c.sudo("kubectl apply -f k8s/cluster/traefik-deployment.yaml")
-    
+    c.run("helm repo add traefik https://helm.traefik.io/traefik")
+    c.run("helm repo update")
+    kubeconfig = os.environ.get('KUBECONFIG')
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install traefik traefik/traefik")
     print("Traefik Ingress Controller installed successfully")
 
 
@@ -63,7 +90,15 @@ def delete_cluster(c, name="my-cluster"):
     c.sudo("rm -rf ~/.kube/config")
     print(f"Cluster '{name}' deleted successfully")
 
-
+@task
+def get_kubeconfig(c):
+    kubeconfig_path = os.getenv("KUBECONFIG")
+    print(f"KUBECONFIG environment variable: {kubeconfig_path}")
+    if kubeconfig_path:
+        result = c.run(f"cat {kubeconfig_path}", hide=True)
+        print(result.stdout)
+    else:
+        print("KUBECONFIG environment variable not set")
 
 @task
 def join_as_worker(c, skip_cert_verification=True):
@@ -139,91 +174,6 @@ def push_image_to_registry(c, image_name, tag="latest"):
 
 
 
-@task
-def get_kubeconfig(c):
-    # Get the container ID of the k3s server
-    result = subprocess.run(['docker-compose', 'ps', '-q', 'k3s-server'], capture_output=True, text=True)
-    container_id = result.stdout.strip()
-
-    if not container_id:
-        print("k3s-server container not found.")
-        return
-
-    # Define paths
-    kubeconfig_local_path = os.path.join(os.getcwd(), 'kubeconfig.yaml')
-    ca_cert_local_path = os.path.join(os.getcwd(), 'server-ca.crt')
-
-    # Copy kubeconfig file from the container
-    subprocess.run(['docker', 'cp', f'{container_id}:/output/kubeconfig.yaml', kubeconfig_local_path])
-
-    # Copy CA certificate from the container
-    subprocess.run(
-        ['docker', 'cp', f'{container_id}:/var/lib/rancher/k3s/server/tls/server-ca.crt', ca_cert_local_path])
-
-    # Read and encode the CA certificate
-    with open(ca_cert_local_path, 'rb') as ca_cert_file:
-        ca_cert_content = ca_cert_file.read()
-        ca_cert_encoded = base64.b64encode(ca_cert_content).decode('utf-8')
-
-    # Load the kubeconfig file
-    with open(kubeconfig_local_path, 'r') as kubeconfig_file:
-        kubeconfig = yaml.safe_load(kubeconfig_file)
-
-    # Update the cluster section with the CA certificate
-    for cluster in kubeconfig['clusters']:
-        cluster['cluster']['certificate-authority-data'] = ca_cert_encoded
-
-    # Save the updated kubeconfig file
-    with open(kubeconfig_local_path, 'w') as kubeconfig_file:
-        yaml.safe_dump(kubeconfig, kubeconfig_file, default_flow_style=False)
-
-    print(f"Kubeconfig file and CA certificate have been downloaded and updated.")
-    print(f"KUBECONFIG path: {kubeconfig_local_path}")
-
-
-
-
-
-@task
-def get_metallb_logs(c):
-    # Define the namespaces and component names
-    namespace = "metallb-system"
-    components = ["controller", "speaker"]
-
-    # Iterate over the components and fetch logs
-    for component in components:
-        # Get the pod name for each component
-        result = subprocess.run(
-            ["kubectl", "get", "pods", "-n", namespace, "-l", f"component={component}", "-o",
-             "jsonpath={.items[0].metadata.name}"],
-            capture_output=True,
-            text=True
-        )
-        pod_name = result.stdout.strip()
-
-        if not pod_name:
-            print(f"No pods found for component: {component}")
-            continue
-
-        # Fetch logs from the pod
-        logs_result = subprocess.run(
-            ["kubectl", "logs", pod_name, "-n", namespace],
-            capture_output=True,
-            text=True
-        )
-        logs = logs_result.stdout
-
-        # Filter logs for errors
-        error_logs = [line for line in logs.split('\n') if "error" in line.lower()]
-
-        # Print the filtered error logs
-        if error_logs:
-            print(f"\nError logs for {component} ({pod_name}):")
-            for log in error_logs:
-                print(log)
-        else:
-            print(f"\nNo error logs found for {component} ({pod_name}).")
-
 
 @task
 def set_kubeconfig_env(c):
@@ -261,3 +211,61 @@ def get_cluster_ip(c):
             print("Unable to parse node information")
     else:
         print("No nodes found in the cluster")
+
+
+import os
+from invoke import task
+
+@task
+def clean_containers(c):
+    """Remove stale Kubernetes containers"""
+    result = c.run("sudo docker ps -a | grep k8s", hide=True, warn=True)
+    containers = result.stdout.splitlines()
+    
+    if not containers:
+        print("No stale Kubernetes containers found.")
+    else:
+        for container in containers:
+            container_id = container.split()[0]
+            c.sudo(f"docker rm -f {container_id}")
+        print("Stale Kubernetes containers removed.")
+
+@task
+def clean_network(c):
+    """Clean up CNI configurations and reset IP tables"""
+    c.sudo("rm -rf /etc/cni/net.d")
+    c.sudo("iptables -F")
+    c.sudo("iptables -t nat -F")
+    c.sudo("ipvsadm --clear")
+    print("Network configurations and IP tables reset.")
+
+@task
+def stop_kubelet(c):
+    """Stop and disable kubelet service"""
+    c.sudo("systemctl stop kubelet")
+    c.sudo("systemctl disable kubelet")
+    print("Kubelet service stopped and disabled.")
+
+@task
+def cleanup_kube_files(c):
+    """Remove remaining Kubernetes configuration files"""
+    c.sudo("rm -rf /etc/kubernetes/")
+    c.sudo("rm -rf /var/lib/etcd/")
+    c.sudo("rm -rf /var/lib/kubelet/")
+    print("Kubernetes configuration files removed.")
+
+@task
+def restart_docker(c):
+    """Restart Docker service"""
+    c.sudo("systemctl restart docker")
+    print("Docker service restarted.")
+
+@task
+def full_cleanup(c):
+    """Perform full cleanup of stale Kubernetes resources and prepare environment"""
+    clean_containers(c)
+    clean_network(c)
+    stop_kubelet(c)
+    cleanup_kube_files(c)
+    restart_docker(c)
+    print("Full cleanup complete. Environment is ready for a new cluster setup.")
