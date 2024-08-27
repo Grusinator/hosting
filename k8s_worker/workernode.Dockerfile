@@ -30,6 +30,9 @@ RUN apt-mark hold kubelet kubeadm kubectl
 RUN mkdir -p /opt/cni/bin && \
     curl -L https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz | sudo tar -C /opt/cni/bin -xz
 
+# Copy the CNI configuration file
+COPY 10-bridge.conf /etc/cni/net.d/10-bridge.conf
+
 # Copy a predefined containerd config.toml
 COPY config.toml /etc/containerd/config.toml
 
