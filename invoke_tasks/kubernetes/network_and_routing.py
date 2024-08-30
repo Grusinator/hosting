@@ -43,9 +43,17 @@ def deploy_calico(c):
 @task
 def deploy_traefik(c):
     """Deploy Traefik Ingress Controller to the Kubernetes cluster"""
-    # Apply Traefik CRD and RBAC
+    domain = os.getenv('DOMAIN')
     c.run("helm repo add traefik https://helm.traefik.io/traefik")
     c.run("helm repo update")
     kubeconfig = os.environ.get('KUBECONFIG')
-    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install traefik traefik/traefik")
+    c.run(f"""
+        KUBECONFIG={kubeconfig} helm upgrade --install traefik traefik/traefik \
+        --namespace kube-system --create-namespace \
+        --set ingress.enabled=true \
+        --set ingress.hosts[0]=traefik.{domain} \
+        --set ingress.annotations."traefik\.ingress\.kubernetes\.io/router\.entrypoints"=web \
+        --set ingress.paths[0]=/ \
+        --set ingress.pathType=Prefix
+    """)
     print("Traefik Ingress Controller installed successfully")
