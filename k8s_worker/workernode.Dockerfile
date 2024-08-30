@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     lsb-release \
+    open-iscsi \
     sudo \
     containerd
 
