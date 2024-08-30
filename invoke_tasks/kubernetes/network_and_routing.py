@@ -11,8 +11,14 @@ def deploy_pod_network(c):
     c.run("helm repo add projectcalico https://docs.tigera.io/calico/charts")
     # Update the Helm repositories
     c.run("helm repo update")
+    
+    # Ensure the existing Installation resource has the correct annotations and labels
+    installation_name = "default"  # replace with your actual installation name if different
+    c.run(f"KUBECONFIG={kubeconfig} kubectl annotate installations.operator.tigera.io {installation_name} meta.helm.sh/release-name=calico meta.helm.sh/release-namespace=tigera-operator --overwrite")
+    c.run(f"KUBECONFIG={kubeconfig} kubectl label installations.operator.tigera.io {installation_name} app.kubernetes.io/managed-by=Helm --overwrite")
+    
     # Install the Calico operator
-    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install --debug calico projectcalico/tigera-operator --namespace tigera-operator --create-namespace")
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install --force --debug calico projectcalico/tigera-operator --namespace tigera-operator --create-namespace")
     print("Calico installed successfully")
 
 
