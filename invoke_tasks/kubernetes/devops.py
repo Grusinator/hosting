@@ -6,6 +6,8 @@ from invoke import task
 @task
 def deploy_harbor(c):
     kubeconfig = os.environ.get('KUBECONFIG')
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    domain = os.getenv("DOMAIN")
     """Deploy Harbor container registry to the Kubernetes cluster"""
     # Add the Harbor Helm repository
     c.run("helm repo add harbor https://helm.goharbor.io")
@@ -16,11 +18,13 @@ def deploy_harbor(c):
     KUBECONFIG={kubeconfig} helm upgrade --install harbor harbor/harbor \
         --namespace harbor --create-namespace \
         --set expose.type=ingress \
-        --set expose.ingress.hosts.core=harbor.wsh-it.dk \
-        --set externalURL=https://harbor.wsh-it.dk \
+        --set expose.ingress.hosts.core=harbor.{domain} \
+        --set externalURL=https://harbor.{domain} \
         --set persistence.enabled=true \
+        --set harborAdminPassword={admin_password} \
         --timeout 600s
     """)
+
 
     print("Harbor deployment initiated. This may take several minutes to complete.")
     print("You can check the status of the deployment with:")
@@ -61,7 +65,6 @@ def deploy_dokku(c):
     print("To use Dokku, you'll need to set up SSH access and configure your local Dokku CLI.")
     print("Refer to the Dokku documentation for post-installation steps and usage instructions.")
 
-
 @task
 def deploy_gitlab(c):
     kubeconfig = os.environ.get('KUBECONFIG')
@@ -71,19 +74,32 @@ def deploy_gitlab(c):
     c.run("helm repo update")
 
     admin_email = os.getenv("ADMIN_EMAIL")
+    # Define the runners config as a multiline string
+    runners_config = """[[runners]]
+  [runners.kubernetes]
+    privileged = true
+    image = "ubuntu:22.04"
+  [runners.cache]
+    Type = "s3"
+    Path = "gitlab-runner"
+    Shared = true
+    [runners.cache.s3]
+      ServerAddress = "minio.gitlab.svc.cluster.local"
+      BucketName = "runner-cache"
+      Insecure = true
+    """
+
     # Deploy GitLab
     c.run(f"""
     KUBECONFIG={kubeconfig} helm upgrade --install gitlab gitlab/gitlab \
         --namespace gitlab --create-namespace \
         --set global.hosts.domain=gitlab.wsh-it.dk \
         --set certmanager-issuer.email={admin_email} \
-         --set gitlab-runner.runners.privileged=true \
-        --set gitlab-runner.runners.config.cache.type=s3 \
-        --set gitlab-runner.runners.config.cache.s3.serverAddress=minio.gitlab.svc.cluster.local \
-        --set gitlab-runner.runners.config.cache.s3.bucketName=runner-cache \
-        --set gitlab-runner.runners.config.cache.s3.insecure=true \
+        --set gitlab-runner.runners.privileged=true \
+        --set-string gitlab-runner.runners.config="{runners_config}" \
         --timeout 600s
     """)
+
 
     print("GitLab deployment initiated. This may take several minutes to complete.")
     print("You can check the status of the deployment with:")
