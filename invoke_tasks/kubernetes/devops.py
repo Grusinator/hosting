@@ -6,6 +6,9 @@ from invoke import task
 @task
 def deploy_harbor(c):
     kubeconfig = os.environ.get('KUBECONFIG')
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    domain = os.getenv("DOMAIN")
+
     """Deploy Harbor container registry to the Kubernetes cluster"""
     # Add the Harbor Helm repository
     c.run("helm repo add harbor https://helm.goharbor.io")
@@ -16,20 +19,22 @@ def deploy_harbor(c):
     KUBECONFIG={kubeconfig} helm upgrade --install harbor harbor/harbor \
         --namespace harbor --create-namespace \
         --set expose.type=ingress \
-        --set expose.ingress.hosts.core=harbor.wsh-it.dk \
-        --set externalURL=https://harbor.wsh-it.dk \
+        --set expose.ingress.hosts.core={domain} \
+        --set externalURL=https://{domain} \
         --set persistence.enabled=true \
+        --set harborAdminPassword={admin_password} \
         --timeout 600s
     """)
 
     print("Harbor deployment initiated. This may take several minutes to complete.")
     print("You can check the status of the deployment with:")
-    print("kubectl --namespace harbor get pods -w")
-    print("\nOnce deployed, you can access Harbor at: https://harbor.wsh-it.dk")
+    print(f"kubectl --namespace harbor get pods -w")
+    print(f"\nOnce deployed, you can access Harbor at: https://harbor.{domain}")
     print("Default credentials are:")
     print("Username: admin")
-    print("Password: Harbor12345")
+    print(f"Password: {admin_password}")
     print("Please change the password after first login.")
+
 
 
 @task
