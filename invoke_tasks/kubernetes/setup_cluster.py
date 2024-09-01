@@ -57,6 +57,38 @@ def remove_taint(c):
     print(f"Taint removed from {node_name}")
 
 
+
+@task
+def clean_namespace(c, namespace):
+    kubeconfig = os.environ.get('KUBECONFIG')
+
+    print(f"Cleaning up namespace: {namespace}")
+
+    resource_types = [
+        "deployments",
+        "services",
+        "daemonsets",
+        "statefulsets",
+        "replicasets",
+        "pods",
+        "configmaps",
+        "secrets",
+        "serviceaccounts",
+        "persistentvolumeclaims",
+        "ingresses",
+        "roles",
+        "rolebindings",
+        "clusterrolebindings"  # Be careful with cluster-wide resources
+    ]
+
+    for resource in resource_types:
+        print(f"Deleting {resource} in {namespace}...")
+        c.run(f"KUBECONFIG={kubeconfig} kubectl delete {resource} --all -n {namespace} --ignore-not-found", warn=True)
+
+    print(f"Namespace {namespace} cleaned up.")
+
+
+
 @task
 def delete_cluster(c, name="my-cluster"):
     """Delete the Kubernetes cluster"""
@@ -185,3 +217,23 @@ def join_as_worker(c, skip_cert_verification=True):
                    f"{'--discovery-token-unsafe-skip-ca-verification' if skip_cert_verification else f'--discovery-token-ca-cert-hash {k8s_ca_cert_hash}' or ''}"
 
     c.sudo(join_command)
+
+
+@task
+def generate_join_command(c):
+    # Set the kubeconfig path if necessary
+    kubeconfig = os.getenv('KUBECONFIG')
+
+    # Generate the join command using kubeadm
+    result = c.sudo(f"KUBECONFIG={kubeconfig} kubeadm token create --print-join-command", hide=True)
+
+    # Extract the join command
+    join_command = result.stdout.strip()
+
+    if join_command:
+        print("Kubernetes Join Command:")
+        print(join_command)
+    else:
+        print("Error: Unable to generate the join command.")
+
+

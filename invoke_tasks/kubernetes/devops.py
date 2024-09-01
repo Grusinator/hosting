@@ -8,6 +8,7 @@ def deploy_harbor(c):
     kubeconfig = os.environ.get('KUBECONFIG')
     admin_password = os.getenv("ADMIN_PASSWORD")
     domain = os.getenv("DOMAIN")
+<<<<<<< HEAD
 
     """Deploy Harbor container registry to the Kubernetes cluster"""
     # Add the Harbor Helm repository
