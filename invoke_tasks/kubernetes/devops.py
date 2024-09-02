@@ -95,7 +95,6 @@ def deploy_dokku(c):
     print("To use Dokku, you'll need to set up SSH access and configure your local Dokku CLI.")
     print("Refer to the Dokku documentation for post-installation steps and usage instructions.")
 
-
 @task
 def deploy_gitlab(c):
     kubeconfig = os.environ.get('KUBECONFIG')
@@ -126,14 +125,11 @@ def deploy_gitlab(c):
         --namespace gitlab --create-namespace \
         --set global.hosts.domain=gitlab.wsh-it.dk \
         --set certmanager-issuer.email={admin_email} \
-         --set gitlab-runner.runners.privileged=true \
-        --set gitlab-runner.runners.config.cache.type=s3 \
-        --set gitlab-runner.runners.config.cache.s3.serverAddress=minio.gitlab.svc.cluster.local \
-        --set gitlab-runner.runners.config.cache.s3.bucketName=runner-cache \
-        --set gitlab-runner.runners.config.cache.s3.insecure=true \
+        --set gitlab-runner.runners.privileged=true \
         --set-string gitlab-runner.runners.config="{runners_config}" \
         --timeout 600s
     """)
+
 
     print("GitLab deployment initiated. This may take several minutes to complete.")
     print("You can check the status of the deployment with:")
