@@ -23,5 +23,3 @@ services:
           devices:
             - capabilities: [gpu]
     runtime: nvidia
-    entrypoint: /usr/local/bin/join_worker.sh
-

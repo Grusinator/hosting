@@ -101,7 +101,7 @@ def delete_cluster(c, name="my-cluster"):
 
 @task
 def start_worker_in_docker(c):
-    path = "k8s_worker\docker-compose-k8s-worker.yaml"
+    path = "k8s_worker/docker-compose-k8s-worker.yaml"
     c.run(f"docker-compose -f {path} up --build")
 
 
