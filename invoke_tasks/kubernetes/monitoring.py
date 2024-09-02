@@ -131,3 +131,21 @@ def get_prometheus_grafana_password(c):
     print("  kubectl --namespace monitoring port-forward svc/grafana 3000:80")
 
 
+
+@task
+def deploy_teleport(c):
+    kubeconfig = os.environ.get('KUBECONFIG')
+    namespace = "teleport"
+    cluster_name = "kubernetes-teleport"
+
+    print("Deploying Teleport Server...")
+    c.run("helm repo add teleport https://charts.releases.teleport.dev")
+    c.run("helm repo update")
+
+    c.run(f"KUBECONFIG={kubeconfig} helm upgrade --install teleport teleport/teleport-cluster --namespace {namespace} --create-namespace \
+           --set clusterName={cluster_name} \
+           --set proxyService.type=LoadBalancer \
+           --set authService.enabled=true \
+           --set proxyService.enabled=true \
+           --set kubeService.enabled=true")
+
