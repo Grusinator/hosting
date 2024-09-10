@@ -10,7 +10,16 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     open-iscsi \
     sudo \
-    containerd
+    containerd \
+    iptables \
+    software-properties-common  # Install this package for add-apt-repository command
+
+# Set up Docker repository and install the latest Docker
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \
+    && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+    && apt-get update \
+    && apt-get install -y docker-ce docker-ce-cli containerd.io \
+    && apt-get clean
 
 # Create the directory for APT keyrings if it doesn't exist
 RUN mkdir -p /etc/apt/keyrings
@@ -34,8 +43,28 @@ RUN mkdir -p /opt/cni/bin && \
 # Copy the CNI configuration file
 COPY 10-bridge.conf /etc/cni/net.d/10-bridge.conf
 
-# Copy a predefined containerd config.toml
-COPY config.toml /etc/containerd/config.toml
+# Copy the kubelet configuration file
+COPY kubelet-config.yaml /etc/kubelet/kubelet-config.yaml
 
-# Start containerd and ensure it's ready before running the join command
-ENTRYPOINT ["/bin/sh", "-c", "containerd & while [ ! -S /var/run/containerd/containerd.sock ]; do sleep 1; done; kubelet & eval $K8S_JOIN_COMMAND && tail -f /dev/null"]
+# Create /etc/docker directory if it doesn't exist and set the storage driver to overlay2
+RUN mkdir -p /etc/docker && \
+    echo '{"data-root": "/var/lib/docker-alt", "storage-driver": "overlay2"}' > /etc/docker/daemon.json
+
+
+# Add the 'docker' group if it doesn't exist and add the root user to the 'docker' group
+RUN getent group docker || groupadd docker && \
+    usermod -aG docker root
+
+# Copy the start script
+COPY start.sh /usr/local/bin/start.sh
+
+# Make the script executable
+RUN chmod +x /usr/local/bin/start.sh
+
+# Expose Docker socket
+VOLUME /var/lib/docker
+EXPOSE 2375
+
+# Use the script as the entrypoint
+ENTRYPOINT ["/usr/local/bin/start.sh"]
+

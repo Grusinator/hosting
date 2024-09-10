@@ -1,21 +1,16 @@
-version: '3.8'
-
 services:
   k8s-worker-node:
-    image: k8s-worker-node:latest
-    build:
-      context: .
-      dockerfile: workernode.Dockerfile
+    image: registry.k8s.io/pause:latest
     env_file:
       - ../.env
+    entrypoint: ["/bin/sh", "-c", "$K8S_JOIN_COMMAND"]
     privileged: true
     stdin_open: true
     tty: true
     network_mode: "host" 
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-      - /var/lib/docker:/var/lib/docker
+      - /var/lib/docker-alt:/var/lib/docker
       - /var/lib/kubelet:/var/lib/kubelet
     deploy:
       resources:
