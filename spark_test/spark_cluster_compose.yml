@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_PORT=7077
+      - JAVA_HOME=/opt/bitnami/java
+      - PYSPARK_PYTHON=/opt/bitnami/python/bin/python
+      - PYSPARK_DRIVER_PYTHON=/opt/bitnami/python/bin/python
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - spark-network
+
+  spark-worker-1:
+    image: bitnami/spark:latest
+    container_name: spark-worker-1
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - JAVA_HOME=/opt/bitnami/java
+      - PYSPARK_PYTHON=/opt/bitnami/python/bin/python
+      - PYSPARK_DRIVER_PYTHON=/opt/bitnami/python/bin/python
+    depends_on:
+      - spark-master
+    networks:
+      - spark-network
+
+  spark-worker-2:
+    image: bitnami/spark:latest
+    container_name: spark-worker-2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - JAVA_HOME=/opt/bitnami/java
+      - PYSPARK_PYTHON=/opt/bitnami/python/bin/python
+      - PYSPARK_DRIVER_PYTHON=/opt/bitnami/python/bin/python
+    depends_on:
+      - spark-master
+    networks:
+      - spark-network
+
+  spark-driver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-driver
+    environment:
+      - SPARK_MODE=driver
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - JAVA_HOME=/opt/bitnami/java
+      - PYSPARK_PYTHON=/opt/bitnami/python/bin/python
+      - PYSPARK_DRIVER_PYTHON=/opt/bitnami/python/bin/python
+    depends_on:
+      - spark-master
+    networks:
+      - spark-network
+    command: ["python","-m","pytest", "test_local_spark_cluster.py"]
+
+networks:
+  spark-network:
+    driver: bridge
